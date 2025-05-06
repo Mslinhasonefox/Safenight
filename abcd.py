@@ -1,32 +1,40 @@
+import branca.colormap as cm  # 加图例用
 import streamlit as st
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 
-# 页面配置
-st.set_page_config(page_title="Safenight - Population", layout="wide")
-
-# 中心点与亮色底图
+st.set_page_config(page_title="Population Map", layout="wide")
 CENTER = [22.284, 114.137]
-TILES  = "cartodb positron"
 
-# 加载人口密度地图
 def population_map():
     roads = gpd.read_file("zip://safenight/HKU_ROUTE_MEAN_PopDen.zip!HKU_ROUTE_MEAN_PopDen/HKU_ROUTE_MEAN_PopDen.shp")
-    m = folium.Map(location=CENTER, zoom_start=15, tiles=TILES)
-    for _, r in roads.iterrows():
+    
+    # 检查数据字段
+    if 'MEAN' not in roads.columns:
+        st.error("字段 'MEAN' 不存在，无法可视化人口密度")
+        return folium.Map(location=CENTER, zoom_start=15)
+
+    # 构建线性颜色映射
+    vmin, vmax = roads["MEAN"].min(), roads["MEAN"].max()
+    colormap = cm.linear.YlOrRd_09.scale(vmin, vmax)
+    colormap.caption = 'Population Density (MEAN)'
+
+    m = folium.Map(location=CENTER, zoom_start=15, tiles="cartodb positron")
+
+    for _, row in roads.iterrows():
         folium.GeoJson(
-            r.geometry,
-            style_function=lambda f: {"color": "darkred", "weight": 3},
-            popup=folium.Popup(f"Population density: {r['MEAN']}", max_width=300)
+            row.geometry,
+            style_function=lambda feature, value=row["MEAN"]: {
+                "color": colormap(value),
+                "weight": 4,
+                "opacity": 0.8
+            },
+            tooltip=f"Population density: {row['MEAN']}"
         ).add_to(m)
+
+    colormap.add_to(m)
     return m
 
-# 页面标题
-st.markdown(
-    "<h1 style='text-align: center; color: black;'>Safenight - Population Density Map</h1>",
-    unsafe_allow_html=True
-)
-
-# 地图展示
-st_folium(population_map(), height=700)
+# 渲染地图
+st_folium(population_map(), height=750)
